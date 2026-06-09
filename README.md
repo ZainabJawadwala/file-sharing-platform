@@ -1,127 +1,230 @@
-Project: File Sharing Platform
+# File Sharing Platform
 
-Project Overview
+## Project Overview
 
-Purpose: Implements backend helpers for authentication and S3-based file uploads for a file-sharing platform. The front-end contains an upload form that posts files to an upload endpoint.
-Main components: auth.py (password hashing, JWT creation/verification), s3_utils.py (S3 client + presigned upload helpers), uploads.html (file upload form).
-auth.py — Authentication helper
+This project implements backend helpers for authentication and AWS S3-based file uploads for a file-sharing platform. The frontend contains a simple upload form that allows users to submit files to an upload endpoint.
 
-Responsibility: Hashing and verifying passwords; creating and decoding access tokens (JWT).
-Key variables:
-SECRET_KEY: JWT signing secret from environment or fallback default.
-ALGORITHM: HMAC algorithm used (HS256).
-ACCESS_TOKEN_EXPIRE_MINUTES: Token lifetime (1 day by default).
-Functions:
-hash_password(password: str) -> str: Uses passlib with bcrypt to create a salted hash. Call when creating user accounts or storing new passwords.
-verify_password(password: str, hashed: str) -> bool: Verifies plaintext password against stored bcrypt hash. Call at login.
-create_access_token(data: dict, expires_delta: Optional[timedelta]) -> str: Copies data, adds exp as UNIX timestamp, signs with SECRET_KEY using python-jose. Returns JWT string.
-decode_access_token(token: str) -> Optional[dict]: Verifies and decodes JWT; returns payload or None on verification error.
-Notes & behavior:
-If python-jose isn't installed, the module raises at runtime; a small stub is present only to silence static checks.
-exp is stored as integer UNIX timestamp to be broadly compatible with JWT consumers.
-Password handling uses passlib with bcrypt (secure, salted, slow-hash).
-Authentication (login) flow — how it works step-by-step
+The main goal of the project is to provide secure user authentication using JWT tokens and efficient file uploads using Amazon S3.
 
-Client sends login credentials (username/email + password) to the backend login endpoint.
-Backend looks up user by username/email and retrieves stored password hash.
-Backend calls verify_password(submitted_password, stored_hash).
-If False: respond with 401/403 (invalid credentials).
-If password is correct, backend prepares token claims (e.g., {"sub": user_id, "role": ...}) and calls create_access_token(claims).
-Backend returns the JWT to client (commonly in JSON body or a secure cookie).
-Client includes token in future requests (Authorization: Bearer <token>).
-Backend routes that require authentication validate tokens by calling decode_access_token(token); if None, reject.
-s3_utils.py — S3 helpers
+## Main Components
 
-Responsibility: Provide AWS S3 client and presigned upload helpers so clients can upload directly to S3.
-Behavior:
-If boto3 not installed, methods raise with a clear message.
-get_s3_client() creates a boto3 session client using environment-provided AWS keys and returns an S3 client.
-Functions:
-create_presigned_post(bucket_name, object_name, expires_in=3600, acl="private") -> Dict[str, Any]:
-Calls s3_client.generate_presigned_post(...).
-Returns data for browser-side multipart POST to S3 (URL + form fields).
-Use for HTML form direct-to-S3 uploads when you want multipart form uploads (e.g., larger files).
-create_presigned_put_url(bucket_name, object_name, expires_in=3600) -> str:
-Calls s3_client.generate_presigned_url("put_object", ...).
-Returns a presigned URL that a client can PUT to directly with the file body.
-Useful for single-request uploads (e.g., PUT with fetch or curl).
-Environment variables used:
-AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
-Upload flow (end-to-end — common patterns)
+### auth.py
 
-Two common server-assisted approaches:
-Backend returns a presigned POST form:
-Client requests upload info from backend (e.g., POST /files/request-upload).
-Backend calls create_presigned_post(bucket, object_key) and returns the result.
-Client uses returned URL + fields to POST the file directly to S3 (browser form).
-S3 stores the file; backend can be notified via S3 event or client can inform backend of completion.
-Backend returns presigned PUT URL:
-Client requests a presigned PUT from backend.
-Backend calls create_presigned_put_url(bucket, object_key) and returns the URL.
-Client does an HTTP PUT to that URL with the file body.
-The project’s uploads.html uses a basic form that posts to an internal /upload/1 endpoint — that endpoint likely either:
-Receives the file and uploads server-side to S3 (using s3_utils.get_s3_client() and put_object), OR
-Uses the server to issue a presigned artifact and the client should instead post directly to S3 (but the HTML currently posts to /upload/1).
-How components interact
+The `auth.py` module is responsible for user authentication and security-related operations.
 
-Frontend form → Backend upload endpoint.
-Backend upload endpoint → uses s3_utils to get S3 client or presigned data → S3 stores file.
-User auth uses auth.py for login and token creation → token used for protected endpoints such as presigned request creation.
-How to run locally (simple steps)
+It provides functionality for:
 
-Create venv and install dependencies:
+* Password hashing using bcrypt
+* Password verification during login
+* JWT access token creation
+* JWT token validation and decoding
+
+#### Key Variables
+
+* `SECRET_KEY` – JWT signing secret loaded from environment variables or a fallback default value.
+* `ALGORITHM` – HMAC signing algorithm (`HS256`).
+* `ACCESS_TOKEN_EXPIRE_MINUTES` – Token expiration period (default: 1 day).
+
+#### Functions
+
+**hash_password(password: str) -> str**
+
+Creates a secure bcrypt hash of the provided password. This function is used when creating user accounts or storing new passwords.
+
+**verify_password(password: str, hashed: str) -> bool**
+
+Verifies whether a plaintext password matches a previously stored bcrypt hash.
+
+**create_access_token(data: dict, expires_delta: Optional[timedelta]) -> str**
+
+Creates and signs a JWT access token. The token payload includes an expiration timestamp (`exp`) stored as a UNIX timestamp for compatibility with JWT consumers.
+
+**decode_access_token(token: str) -> Optional[dict]**
+
+Validates and decodes a JWT token. Returns the token payload if valid; otherwise returns `None`.
+
+---
+
+### s3_utils.py
+
+The `s3_utils.py` module provides helper functions for AWS S3 operations and presigned uploads.
+
+Its purpose is to allow clients to upload files directly to Amazon S3 while reducing backend server load.
+
+#### Functions
+
+**get_s3_client()**
+
+Creates and returns an AWS S3 client using credentials stored in environment variables.
+
+**create_presigned_post(bucket_name, object_name, expires_in=3600, acl="private")**
+
+Generates a presigned POST form that allows browser-based multipart uploads directly to S3.
+
+Returns:
+
+* Upload URL
+* Required form fields
+
+This method is useful for larger file uploads.
+
+**create_presigned_put_url(bucket_name, object_name, expires_in=3600)**
+
+Generates a presigned PUT URL that allows direct file uploads to S3 using a single HTTP request.
+
+This method is useful for uploads performed using tools such as Fetch API, cURL, or other HTTP clients.
+
+---
+
+### uploads.html
+
+The frontend upload form is implemented in `uploads.html`.
+
+The form submits files to an internal `/upload/1` endpoint. Depending on the backend implementation, this endpoint may:
+
+* Upload files to S3 on the server side using the AWS S3 client.
+* Generate presigned upload credentials and allow direct uploads to S3.
+
+---
+
+## Authentication Flow
+
+The authentication process follows these steps:
+
+1. The client submits login credentials (username/email and password).
+2. The backend retrieves the corresponding user record and stored password hash.
+3. The submitted password is verified using `verify_password()`.
+4. If verification fails, the request is rejected.
+5. If verification succeeds, token claims are prepared and passed to `create_access_token()`.
+6. A signed JWT token is generated and returned to the client.
+7. The client includes the token in future requests using:
+
+```text
+Authorization: Bearer <token>
+```
+
+8. Protected routes validate incoming tokens using `decode_access_token()`.
+9. Invalid or expired tokens are rejected.
+
+---
+
+## File Upload Flow
+
+The project supports two common upload approaches.
+
+### Presigned POST Upload
+
+1. Client requests upload information from the backend.
+2. Backend generates a presigned POST using `create_presigned_post()`.
+3. Upload information is returned to the client.
+4. Client uploads the file directly to Amazon S3.
+5. The file is stored in the specified S3 bucket.
+
+### Presigned PUT Upload
+
+1. Client requests a presigned upload URL.
+2. Backend generates the URL using `create_presigned_put_url()`.
+3. URL is returned to the client.
+4. Client uploads the file using an HTTP PUT request.
+5. Amazon S3 stores the uploaded file.
+
+---
+
+## Component Interaction
+
+The overall workflow is:
+
+1. User logs into the application.
+2. Authentication is handled by `auth.py`.
+3. JWT access tokens are generated and used for protected requests.
+4. Upload requests are processed through backend upload endpoints.
+5. Backend uses `s3_utils.py` to create S3 clients or presigned upload credentials.
+6. Files are uploaded and stored in Amazon S3.
+
+---
+
+## Environment Variables
+
+The following environment variables must be configured:
+
+```env
+SECRET_KEY=your_secret_key
+
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_access_key
+AWS_REGION=your_region
+```
+
+These values are required for JWT signing and AWS S3 connectivity.
+
+---
+
+## Local Setup
+
+### Create a Virtual Environment
+
+```bash
 python -m venv .venv
-Windows PowerShell: .\.venv\Scripts\Activate.ps1
+```
+
+### Activate the Environment
+
+**Windows PowerShell**
+
+```bash
+.\.venv\Scripts\Activate.ps1
+```
+
+### Install Dependencies
+
+```bash
 pip install passlib[bcrypt] python-jose boto3
-Run the server (project doesn't include full server file here; common frameworks: FastAPI/Flask/Django).
-To test helpers only, use the provided run_test.py (if present) or a small script:
-The script should import auth and s3_utils and exercise functions.
-Files to open: auth.py, s3_utils.py, uploads.html, run_test.py.
-Environment variables you must set for full behavior
+```
 
-SECRET_KEY — used to sign JWTs (override default for production).
-AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION — used by s3_utils to create S3 client.
-Optional: other app-specific settings for DB, host/port, etc.
-Security considerations (what interviewers expect you to know)
+### Run the Application
 
-Never use default SECRET_KEY in production — supply a secure random key.
-Store AWS credentials in IAM roles (if running on AWS) or a secure secret manager; avoid committing credentials.
-JWTs: sign with strong secret and use reasonable expiry; if sensitive operations needed, consider refresh tokens and revocation lists.
-Validate file types and sizes server-side even if uploading directly to S3.
-For presigned URLs: limit TTL, restrict object key prefixes, and set ACLs appropriately.
-Hash passwords with an adaptive algorithm like bcrypt (done here); set cost factor appropriately.
-Error handling and failure modes
+Run the project using the appropriate application server depending on the framework being used.
 
-Missing dependencies (python-jose, boto3) will raise runtime errors; code includes stubs only for static analysis.
-S3 client creation will fail if AWS environment variables missing — catch these errors and return meaningful responses.
-JWT decode failure returns None; the app must interpret that as unauthorized.
-Network and permission errors from AWS are surfaced as ClientError — catch and respond appropriately (log details, do not leak secrets).
-Common interview Q&A (short, direct answers you can rehearse)
+For testing helper functions, run:
 
-Q: "How do you store passwords?"
-A: "We use passlib with bcrypt to store salted hashes; we never store plaintext."
-Q: "How do you authenticate users?"
-A: "On login we verify password, then issue an expiring JWT signed with an HMAC secret; subsequent requests send Authorization: Bearer <token>."
-Q: "How are file uploads handled?"
-A: "We generate presigned URLs or POST forms via AWS S3 using boto3 so clients can upload directly to S3, minimizing server bandwidth and improving scalability. Alternatively server-side uploads are possible by accepting files and using the S3 client to upload them."
-Q: "How do you keep uploads secure?"
-A: "We verify authenticated user, generate short-lived presigned URLs, validate file type/size, and set appropriate ACLs. AWS IAM restricts actions the app can perform."
-Q: "What happens when an AWS call fails?"
-A: "We catch botocore.exceptions.ClientError, log details, and surface a user-friendly error. Retries can be added for transient failures."
-What I changed to fix your yellow-line warnings
+```bash
+python run_test.py
+```
 
-Added explicit types and small runtime stubs for optional external modules (python-jose, boto3) so static analyzers (Pylance) don't show "possibly None" or missing attribute warnings.
-Annotated external imports with # type: ignore where appropriate, and added precise function return types.
-Practical demo script (what run_test.py does)
+---
 
-Hashes a test password and verifies it.
-Creates a JWT for a test subject and attempts to decode it.
-Writes results to a final file so you can open it directly in your editor.
-Quick checklist to show in interview / demo
+## Security Considerations
 
-Show auth.py: point out hash_password, verify_password, token creation & decoding.
-Show s3_utils.py: point out get_s3_client(), create_presigned_post(), create_presigned_put_url().
-Show uploads.html: demonstrate how the form posts and explain how it would map to a presigned flow or server upload.
-Run run_test.py live (or show its output) to demonstrate helpers work end-to-end.
+* Passwords are securely stored using bcrypt hashing.
+* JWT tokens are signed using a secret key and include expiration timestamps.
+* AWS credentials should never be committed to source control.
+* In production environments, use a strong custom `SECRET_KEY`.
+* File type and size validation should be performed before uploads.
+* Presigned URLs should use short expiration periods.
+* AWS IAM permissions should be restricted to the minimum required access.
 
+---
 
+## Error Handling
+
+The project includes handling for common failure scenarios:
+
+* Missing `python-jose` dependency will prevent JWT functionality.
+* Missing `boto3` dependency will prevent AWS S3 functionality.
+* Missing AWS environment variables will cause S3 client creation failures.
+* Invalid or expired JWT tokens return `None` during validation.
+* AWS service failures may raise `ClientError` exceptions and should be handled appropriately by the application.
+
+---
+
+## Testing
+
+The `run_test.py` script can be used to verify the core functionality of the project.
+
+The script performs the following actions:
+
+* Hashes a sample password.
+* Verifies the generated password hash.
+* Creates a JWT token.
+* Decodes and validates the JWT token.
+* Writes results to an output file for inspection.
