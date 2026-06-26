@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Presign Upload Demo</title>
+  <style>
+    body{font-family:Segoe UI,Arial;padding:24px}
+    .card{max-width:700px;background:#f9f9fb;padding:18px;border-radius:8px;border:1px solid #e3e6ee}
+    label{display:block;margin:8px 0;font-weight:600}
+    input,select,button{padding:10px;margin:6px 0;width:100%;box-sizing:border-box}
+    #log{white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;border:1px solid #e8e8ef;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Presign Upload Demo</h2>
+    <p>Pick a file, choose an upload option below, and paste your token if needed.</p>
+
+    <label>Auth token (optional)
+      <input id="token" placeholder="Paste token (if required)" />
+    </label>
+
+    <label>Save file name (will auto-fill when you pick a file)
+      <input id="filename" placeholder="example.jpg" />
+    </label>
+
+    <label>Choose file to upload
+      <input id="file" type="file" onchange="document.getElementById('filename').value = this.files[0] ? this.files[0].name : ''" />
+    </label>
+
+    <label>Upload option
+      <select id="method">
+        <option value="post">Form upload (use upload link)</option>
+        <option value="put">Direct upload (use upload link)</option>
+      </select>
+    </label>
+
+    <button id="uploadBtn">Get upload link and send file</button>
+
+    <div id="log"></div>
+  </div>
+
+  <script src="presign_demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Sharing Platform - Upload</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h2>📤 Upload File</h2>
+    <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+      <label for="file-upload" class="sr-only">Choose file to upload</label>
+      <input id="file-upload" type="file" name="file" accept="*/*" aria-label="File to upload" required onchange="document.getElementById('selected-file-name').textContent = this.files[0] ? this.files[0].name : 'No file selected'">
+      <p id="selected-file-name">No file selected</p>
+      <button type="submit">Upload File</button>
+      <div id="upload-result" class="upload-result">Choose a file and click Upload File. The result will appear here.</div>
+    </form>
+
+    <div class="file-search">
+      <h3>Find uploaded file</h3>
+      <input id="query-filename" type="text" placeholder="Enter uploaded file name" aria-label="File name to open">
+      <button id="find-file-btn" type="button">Show File</button>
+      <div id="file-result">Type a filename and click Show File</div>
+    </div>
+
+    <div id="file-view-box" class="file-view-box">
+      <h3>View or redownload uploaded file</h3>
+      <div id="view-content">The selected file preview and download link will appear here.</div>
+    </div>
+  </div>
+
+  <script>
+    const fileUpload = document.getElementById('file-upload');
+    const selectedFileName = document.getElementById('selected-file-name');
+    const queryInput = document.getElementById('query-filename');
+    const resultDiv = document.getElementById('file-result');
+    const viewContent = document.getElementById('view-content');
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderDownloadBox(filename, previewHtml) {
+      viewContent.innerHTML = `
+        <p><strong>${escapeHtml(filename)}</strong> is available.</p>
+        ${previewHtml}
+        <a href="/uploads/${encodeURIComponent(filename)}" target="_blank" class="download-link">Download file</a>
+      `;
+    }
+
+    fileUpload.addEventListener('change', function() {
+      const name = this.files[0] ? this.files[0].name : 'No file selected';
+      selectedFileName.textContent = name;
+      if (this.files[0]) {
+        queryInput.value = this.files[0].name;
+      }
+    });
+
+    document.getElementById('find-file-btn').addEventListener('click', async () => {
+      const filename = queryInput.value.trim();
+      if (!filename) {
+        resultDiv.textContent = 'Please enter a filename.';
+        return;
+      }
+
+      const url = '/uploads/' + encodeURIComponent(filename);
+      resultDiv.textContent = 'Checking file...';
+      viewContent.innerHTML = '';
+
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) {
+          resultDiv.textContent = '';
+          const ext = filename.split('.').pop().toLowerCase();
+          const imageTypes = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+          const pdfTypes = ['pdf'];
+          const textTypes = ['txt', 'md', 'json', 'csv', 'py', 'html', 'js', 'css'];
+
+          if (imageTypes.includes(ext)) {
+            renderDownloadBox(filename, `<img src="${url}" alt="${escapeHtml(filename)}" class="preview-image">`);
+          } else if (pdfTypes.includes(ext)) {
+            renderDownloadBox(filename, `<iframe src="${url}" class="preview-frame"></iframe>`);
+          } else if (textTypes.includes(ext)) {
+            const fileRes = await fetch(url);
+            if (!fileRes.ok) throw new Error('Unable to load file');
+            const text = await fileRes.text();
+            renderDownloadBox(filename, `<pre>${escapeHtml(text)}</pre>`);
+          } else {
+            renderDownloadBox(filename, `<p>No preview available for this file type.</p>`);
+          }
+        } else {
+          resultDiv.textContent = 'File not found. Check the filename and upload first.';
+        }
+      } catch (error) {
+        resultDiv.textContent = 'Error checking file: ' + error.message;
+      }
+    });
+
+    document.getElementById('upload-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+      const uploadResult = document.getElementById('upload-result');
+      uploadResult.textContent = 'Uploading file...';
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          uploadResult.textContent = `Upload failed: ${response.status} ${errorText}`;
+          return;
+        }
+
+        const data = await response.json();
+        uploadResult.textContent = `Upload successful. File ID: ${data.file_id}`;
+      } catch (error) {
+        uploadResult.textContent = `Upload error: ${error.message}`;
+      }
+    });
+  </script>
+</body>
+</html>
