@@ -31,18 +31,6 @@ The project requires the following environment variables:
 
 These values are required for JWT authentication and AWS S3 connectivity.
 
-## Installation
-
-Create a virtual environment, activate it, and install the required dependencies:
-
-```bash
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install passlib[bcrypt] python-jose boto3
-```
-
-After setting the required environment variables, run the project using your preferred Python framework. You can also run `run_test.py` to test password hashing and JWT token generation.
-
 ## Security
 
 Passwords are securely stored using **bcrypt** hashing instead of plain text. JWT tokens are signed using a secret key and include an expiration time for secure authentication. AWS credentials should always be stored in environment variables and never committed to the repository.
