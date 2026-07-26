@@ -35,6 +35,3 @@ These values are required for JWT authentication and AWS S3 connectivity.
 
 Passwords are securely stored using **bcrypt** hashing instead of plain text. JWT tokens are signed using a secret key and include an expiration time for secure authentication. AWS credentials should always be stored in environment variables and never committed to the repository.
 
-## Conclusion
-
-This project demonstrates a simple and secure file-sharing system that combines JWT authentication with AWS S3 cloud storage. It provides secure user login, protected access using JWT tokens, and efficient file uploads through Amazon S3.
